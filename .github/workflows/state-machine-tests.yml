@@ -1,0 +1,42 @@
+name: State Machine Regression Tests
+
+on:
+  pull_request:
+    paths:
+      - "factory/node-32gb/src/**"
+      - "factory/node-32gb/tests/**"
+      - "factory/node-32gb/docker-compose.yml"
+      - "factory/node-32gb/Dockerfile"
+      - "factory/node-32gb/requirements.txt"
+      - ".github/workflows/state-machine-tests.yml"
+  push:
+    branches: ["main", "master"]
+    paths:
+      - "factory/node-32gb/src/**"
+      - "factory/node-32gb/tests/**"
+      - "factory/node-32gb/docker-compose.yml"
+      - "factory/node-32gb/Dockerfile"
+      - "factory/node-32gb/requirements.txt"
+      - ".github/workflows/state-machine-tests.yml"
+
+jobs:
+  state-machine-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and start API service
+        run: docker compose -f factory/node-32gb/docker-compose.yml up -d --build api
+
+      - name: Run state machine regression module
+        run: docker compose -f factory/node-32gb/docker-compose.yml exec -T api python -m unittest tests/test_state_machine.py -v
+
+      - name: Show API logs on failure
+        if: failure()
+        run: docker compose -f factory/node-32gb/docker-compose.yml logs api
+
+      - name: Teardown
+        if: always()
+        run: docker compose -f factory/node-32gb/docker-compose.yml down -v
