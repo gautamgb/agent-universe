@@ -1,0 +1,60 @@
+# Run from repo: factory/node-32gb. The env_file path ../../.env is relative to THIS FILE
+# (repo-root .env), not your shell cwd — it should always load agent-universe/.env.
+# If container has no PRIMARY_MODEL: verify that file exists on the host next to the compose file.
+# Debug: docker compose exec api env | grep -E 'PRIMARY_MODEL|SCOUT_MODEL|LITELLM_BASE'
+name: agent-universe-compute
+
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:8888/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/app
+      - ../../:/workspace
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${AIDER_SSH_KEY_HOST_PATH:-${HOME}/.ssh/ai_builder_ed25519}:/keys/id_ed25519:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      AGENT_UNIVERSE_ROOT: /workspace
+      # Absolute path on the Docker *host* to the repo (for nested `docker run -v` from builder_agent)
+      AGENT_UNIVERSE_HOST_PATH: ${AGENT_UNIVERSE_HOST_PATH:-}
+      AIDER_SSH_KEY_CONTAINER_PATH: /keys/id_ed25519
+    command:
+      - uvicorn
+      - src.api:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8888"
+
+  streamlit:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    ports:
+      - "8505:8505"
+    volumes:
+      - ../../:/workspace:ro
+    environment:
+      AGENT_UNIVERSE_API_BASE: http://api:8888
+    command:
+      - streamlit
+      - run
+      - src/ui.py
+      - --server.port=8505
+      - --server.address=0.0.0.0
+    depends_on:
+      api:
+        condition: service_healthy

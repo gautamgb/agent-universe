@@ -1,0 +1,70 @@
+# Run docker compose from THIS folder (factory/node-16gb).
+# Substitution needs a .env: use ./.env (deploy.sh copies repo .env here) OR
+#   --env-file ../../.env ONLY when cwd is factory/node-16gb (repo root is two dirs up).
+# If you run from repo root, ../../.env wrongly resolves to /.env — use:
+#   docker compose --env-file .env ...   OR   --env-file /full/path/to/agent-universe/.env
+name: agent-universe-gateway
+
+services:
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Optional: used by postgres/*.sh to allow the 32GB node over Tailscale (pg_hba). Can be empty for local-only gateway.
+      TAILSCALE_32GB_IP: ${TAILSCALE_32GB_IP:-}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # First-time init only: postgres/docker-entrypoint-initdb.d (e.g. pg_hba for TAILSCALE_32GB_IP).
+      - ./postgres/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d:ro
+    # Stock postgres entrypoint (avoid custom wrap mount; was linked to restart loops on some hosts).
+    # No Docker healthcheck: peer/TCP/pg_hba differences made pg_isready unreliable on mini16.
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 8
+      start_period: 5s
+
+  litellm:
+    # Postgres + Prisma: use litellm-database (not litellm) so migrations/views exist — see LiteLLM deploy docs.
+    image: docker.litellm.ai/berriai/litellm-database:main-stable
+    restart: unless-stopped
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    ports:
+      - "4040:4000"
+    volumes:
+      - ./litellm_config.yaml:/app/config.yaml:ro
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      # Optional if you only use Ollama routes; required for Gemini models in litellm_config.yaml
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:?set LITELLM_MASTER_KEY in .env — must start with sk-}
+      # Reachable Ollama API when PRIMARY_MODEL/SCOUT_MODEL use ollama/... (e.g. compute host :11434)
+      OLLAMA_API_BASE: ${OLLAMA_API_BASE:-http://host.docker.internal:11434}
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+
+volumes:
+  postgres_data:

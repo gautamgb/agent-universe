@@ -1,0 +1,1 @@
+Lack of clear authentication mechanism for MongoDB database, potential security risks if not implemented correctly.

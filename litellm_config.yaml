@@ -1,0 +1,27 @@
+# LiteLLM proxy — deploy to 16GB gateway as factory/node-16gb/litellm_config.yaml (mounted /app/config.yaml).
+# Replace INSERT_32GB_TAILSCALE_IP below with your 32GB node's Tailscale IP (digits only, no brackets).
+# Client aliases: PRIMARY_MODEL=local-executive  SCOUT_MODEL=local-scout
+
+model_list:
+  - model_name: local-executive
+    litellm_params:
+      model: ollama/llama3.1:8b
+      api_base: "http://INSERT_32GB_TAILSCALE_IP:11434"
+
+  - model_name: local-scout
+    litellm_params:
+      model: ollama/qwen2.5-coder:14b
+      api_base: "http://INSERT_32GB_TAILSCALE_IP:11434"
+
+litellm_settings:
+  max_budget: 9.5
+  budget_duration: 30d
+  cache: true
+  cache_params:
+    type: redis
+    host: redis
+    port: "6379"
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL

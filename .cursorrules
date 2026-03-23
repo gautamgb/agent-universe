@@ -1,0 +1,16 @@
+Autonomous AI Factory Architectural Rules
+Monorepo Structure: All system code lives in factory/. Output code lives in projects/.
+
+Sub-nodes: factory/node-16gb/ (Gateway) and factory/node-32gb/ (Compute).
+
+Development workflow: Primary edits happen on the 32GB compute (mini32). The 16GB gateway (mini16) does not hold the source of truth for ongoing work. Whenever gateway files change (factory/node-16gb/, or repo-root .env affecting the gateway), sync to mini16 before running Compose there — use factory/node-16gb/deploy.sh from the dev machine that has the repo (rsyncs node-16gb + .env to the Tailscale target in NODE_16GB_RSYNC_DEST).
+
+Security Fencing: Use custom ports. FastAPI: 8888, Streamlit: 8505, LiteLLM: 4040, Postgres: 5433.
+
+Network: Use Tailscale IPs via .env (e.g., TAILSCALE_16GB_IP).
+
+Execution: Do NOT use bash scripts for the builder agent. Use Python subprocess.Popen to run the Aider Docker container natively in the LangGraph node.
+
+Docker Builder: Image from `AIDER_DOCKER_IMAGE` in .env (default `paulgauthier/aider-full`). Restrictions: --rm, --security-opt no-new-privileges, --cap-drop=ALL, --memory=4g, --cpus=2. Must mount ~/.ssh/ai_builder_ed25519:/root/.ssh/id_ed25519:ro.
+
+API Routing: Executive calls route to LiteLLM Proxy. Local calls route to http://host.docker.internal:11434.
