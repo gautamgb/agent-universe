@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import time
 import math
+import re
 from typing import Any
 
 import httpx
@@ -89,6 +90,22 @@ def _matches_filters(
     if build_state and (run.get("build_state") or "") != build_state:
         return False
     return True
+
+
+def _tail_sentences(text: str, max_sentences: int = 50) -> str:
+    """Return the most recent sentence-like chunks from logs.
+
+    Build logs are often line-oriented and may not always include punctuation-based
+    sentence boundaries, so we use sentence splitting first and then fall back to lines.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        return ""
+    parts = [p.strip() for p in re.split(r"(?<=[.!?])\s+", raw) if p.strip()]
+    if len(parts) >= max_sentences:
+        return "\n".join(parts[-max_sentences:])
+    lines = [ln for ln in raw.splitlines() if ln.strip()]
+    return "\n".join(lines[-max_sentences:])
 
 
 def _fetch_runs(
@@ -410,7 +427,10 @@ try:
 except Exception as e:
     logs = f"(log fetch failed: {e})"
 
-st.code(logs or "(no builder output yet)", language="bash")
+recent_logs = _tail_sentences(logs, max_sentences=50)
+st.code(recent_logs or "(no builder output yet)", language="bash")
+if logs and recent_logs != logs:
+    st.caption("Showing the latest 50 sentences from build logs.")
 
 with st.expander("Storage locations", expanded=False):
     st.markdown(f"- Container project dir: `{storage.get('container_project_dir') or 'n/a'}`")

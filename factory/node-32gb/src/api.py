@@ -410,8 +410,6 @@ def _ensure_checkpoint_tables_from_error(exc: BaseException) -> bool:
     if cp is None or not hasattr(cp, "setup"):
         return False
     with _checkpoint_setup_lock:
-        if _checkpoint_setup_succeeded_once:
-            return True
         try:
             _log.warning("Checkpoint tables missing; running checkpointer.setup(): %s", exc)
             cp.setup()
